@@ -1,4 +1,4 @@
-insert into typ_dane(ID_TYP_DANE, nazov_dane) VALUES('1', 'dan z motorových vozidiel');
+insert into typ_dane(ID_TYP_DANE, nazov_dane) VALUES('1', 'dan z motorovÃ½ch vozidiel');
 insert into typ_dane(ID_TYP_DANE, nazov_dane) VALUES('2', 'dan za alkohol');
 insert into typ_dane(ID_TYP_DANE, nazov_dane) VALUES('3', 'dan za benzin');
 insert into typ_dane(ID_TYP_DANE, nazov_dane) VALUES('4', 'DPH');
