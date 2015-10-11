@@ -146,3 +146,4 @@ INSERT INTO osoba (rodne_cislo,dic_podnikatel,meno,priezvisko,titul,datum_od,dat
 INSERT INTO osoba (rodne_cislo,dic_podnikatel,meno,priezvisko,titul,datum_od,datum_do) VALUES ('856003/0001',247,'Sofia','Benedekova','','01.01.14',null);
 INSERT INTO osoba (rodne_cislo,dic_podnikatel,meno,priezvisko,titul,datum_od,datum_do) VALUES ('945216/0001',248,'Lucia','Bolibruchova','Ing.','01.01.14',null);
 INSERT INTO osoba (rodne_cislo,dic_podnikatel,meno,priezvisko,titul,datum_od,datum_do) VALUES ('875210/0001',249,'Ema','Dorcikova','','01.01.14',null);
+update osoba set dic_ponikatel = null where mod(dic_podnikatel,2)=0;
