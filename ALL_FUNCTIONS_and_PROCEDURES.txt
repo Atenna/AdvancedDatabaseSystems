@@ -32,9 +32,8 @@ end;
 /
 -----------------------------------------------------------------------------------------
 create or replace function f_du_obdobie_platca
-/*
-Ivi, tu pridaj komentar, neviem k comu to je...aspon ze ku ktoremu zadaniu
-*/
+-- vypis danovych uradov podla poctu platitelov dane, ktori zaplatili nejaku dan
+-- v jednotlivych mesiacoch za dane obdobie
 (
   p_datum_od IN varchar2,
   p_datum_do IN varchar2
@@ -461,7 +460,7 @@ END f_du_rozpis_platieb;
 /
 /
 -----------------------------------------------------------------------------------------
--- zadanie 8
+-- zadanie 9
 create or replace function f_du_vypis_zmien
 -- vypis PO ktore za definovane obdobie zmenilo spolu/vlastnika aspon 3x
 (
@@ -487,6 +486,24 @@ begin
 end;
 /
 -----------------------------------------------------------------------------------------
+create or replace function f_du_zobraz_prehlad_dani
+ (
+  p_id_platca IN integer,
+  p_id_typ_dane IN integer
+)
+  return sys_refcursor
+as
+  my_cursor_fp sys_refcursor;
+begin
+  open my_cursor_fp for
+    select suma, datum_zaplatenia
+    from d_platba join d_platca_dane using(id_platca)
+    where id_platca = p_id_platca
+    and id_typ_dane = p_id_typ_dane;
+  return my_cursor_fp;
+end;
+/
+
 
 -----------------------------------------------------------------------------------------
 
