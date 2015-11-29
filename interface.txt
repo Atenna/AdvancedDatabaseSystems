@@ -1,0 +1,130 @@
+create or replace function f_du_obdobie_platca
+/*
+funkcia vrati nazov_mesta, mesiac, rok, unikatnych platcov dane za obdobie ktore je parametrom
+parametre: p_datum_od
+parametre: p_datum_do
+vystup: nazov_mesta, mesiac, rok, pocet
+*/
+(
+  p_datum_od IN varchar2,
+  p_datum_do IN varchar2
+)
+-------------------------------------------------------------------
+
+create or replace function f_du_vypis_mesto_uradu
+/*
+funkcia vrati nazov mesta konkretneho DANOVEHO uradu na zaklade ID_ADRESY danoveho uradu
+*/
+(
+  p_id_adresy_udaru IN integer
+)
+
+-------------------------------------------------------------------
+create or replace function f_du_zlozenie_prijimov
+(
+  p_datum_od  IN varchar2, -- dd-mm-yyyy
+  p_datum_do  IN varchar2, -- dd-mm-yyyy
+  p_typ_dane   IN integer,  -- v intervale <0; 20>
+  p_subjekt    IN integer   -- napriklad 0 pre firmy, 1 pre zivnostnikov
+)
+  return sys_refcursor    -- rok - mesiac - mesto_urad - prijem (real)
+
+-------------------------------------------------------------------
+
+create or replace function f_du_platili_menej_ako_priemer
+/*
+Výpis PO, ktoré za posledné 2 (6) roky zaplatili zadaného typu dane menej, ako je ich priemer ( pre firmy, ktoré sú platcami dane aspoò 6 rokov
+*/
+(
+  p_typ_dane IN integer
+)
+  return sys_refcursor
+
+-------------------------------------------------------------------
+create or replace function f_du_typ_dane
+return sys_refcursor
+as
+my_cursor sys_refcursor;
+begin
+  open my_cursor for
+    select * from d_typ_dane;
+    return my_cursor;
+end;
+-------------------------------------------------------------------
+-- vypis PO ktore za posledne 2 roky nezaplatili nic na dani zadaneho typu
+create or replace function f_du_po_neplatca_dane
+(
+  p_typ_dane IN integer
+)
+  return sys_refcursor -- dic firmy, nazov
+-------------------------------------------------------------------
+create or replace function f_du_zobraz_firmy
+---- funkcia vrati nazov firmy, dic_firma, id_platca
+-------------------------------------------------------------------
+create or replace function f_du_zobraz_podnikatelov
+---- funkcia vrati meno podnikatela, dic_podnikatela, id_platca
+-------------------------------------------------------------------
+create or replace function f_du_zobraz_prehlad_dani
+-- funkcia vrati suma - den zaplatenia platby pre vybraneho platcu a typ dane
+(
+  p_id_platca IN integer,
+  p_id_typ_dane IN integer
+)
+-------------------------------------------------------------------
+create or replace function f_du_dan_zo_zisku_pokles
+--zaplatene dane zo zisku za poslednych 5 rokov s kazdorocnym poklesom
+return sys_refcursor
+-- vrati 3 stlpce: id_platca, predosly rok, zaplatenu dan za predosly rok
+-- !!! na toho id_platcu treba v GUI napasovat funkciu f_du_zobraz_udaje_platcu(p_id_platca in INTEGER)
+-------------------------------------------------------------------
+create or replace function f_du_zobraz_udaje_platcu(p_id_platca in INTEGER)
+/*
+Funkcia vrati udaje platcu ak pozname ID_PLATCA
+je jedno ci je to PO/FO, vrati: id_platca, nazov
+*/
+  return sys_refcursor
+-------------------------------------------------------------------
+create or replace function f_du_zobraz_platcov
+/*
+Funkcia vrati zoznam platcov v tvare:
+id_platca, nazov
+je pritom jedno ci ide o FO alebo PO
+Funkcia sa vyuzije pri INSERTOVANI novej platby - bude to uvodny kombo box
+*/
+-------------------------------------------------------------------
+create or replace function f_du_zobraz_typ_dane(p_id_platca IN INTEGER)
+/*
+Funkcia vrati zoznam typov dane ktore moze id_platca aktualne platit
+Funkcia sa vyuzije pri INSERTOVANI novej platby - bude to druhy kombo box, naplnani asynchronne
+*/
+  return sys_refcursor
+-------------------------------------------------------------------
+create or replace PROCEDURE p_du_vloz_platbu(
+	   p_id_platca IN d_platba.id_platca%TYPE,
+	   p_id_typ_dane IN d_platba.id_typ_dane%TYPE,
+	   p_datum_od IN d_platba.datum_od%TYPE,
+	   p_suma IN d_platba.suma%TYPE,
+     p_datum_vzniku IN d_platba.datum_vzniku%TYPE,
+     p_datum_zaplatenia IN d_platba.datum_zaplatenia%TYPE
+     )
+/*
+declare
+begin
+p_du_vloz_platbu(104, 11, to_date('01.01.14','DD.MM.RR'), 200, to_date('01.01.17','DD.MM.RR'), to_date('01.01.17','DD.MM.RR'));
+end;
+*/
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+-------------------------------------------------------------------

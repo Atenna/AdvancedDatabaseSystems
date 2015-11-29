@@ -1,0 +1,493 @@
+create or replace function f_du_dan_zo_zisku_pokles
+--zaplatene dane zo zisku za poslednych 5 rokov s kazdorocnym poklesom
+return sys_refcursor
+-- vrati 4 stlpce: predosly rok, zaplatenu dan za predosly rok, dalsi rok, dan k dalsiemu roku
+as
+  my_cursor_zisk sys_refcursor;
+begin
+  open my_cursor_zisk for
+      select id_platca, predosla.rok rok, predosla.dan dan from
+        (select id_platca, extract(year from datum_zaplatenia) rok, sum(suma*percento/100) dan
+          from d_platba  join d_dan using(id_typ_dane, datum_od) join d_typ_dane using(id_typ_dane)
+          join d_platca_dane d_po using(id_platca)
+        where nazov_dane like '%zisk%'
+        and d_po.dic_firma is not null
+        group by extract(year from datum_zaplatenia), id_platca
+        order by 1 asc) predosla
+      join
+        (select extract(year from datum_zaplatenia) rok, sum(suma*percento/100) dan
+          from d_platba  join d_dan using(id_typ_dane, datum_od) join d_typ_dane using(id_typ_dane)
+          join d_platca_dane d_po using(id_platca)
+        where nazov_dane like '%zisk%'
+        and d_po.dic_firma is not null
+        group by extract(year from datum_zaplatenia), id_platca
+        order by 1 asc) terajsia
+      on (predosla.rok = terajsia.rok -1)
+      where  predosla.dan > terajsia.dan
+      group by id_platca, predosla.rok, predosla.dan
+      order by id_platca, predosla.rok
+      ;
+  return my_cursor_zisk;
+end;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_obdobie_platca
+/*
+Ivi, tu pridaj komentar, neviem k comu to je...aspon ze ku ktoremu zadaniu
+*/
+(
+  p_datum_od IN varchar2,
+  p_datum_do IN varchar2
+)
+  return sys_refcursor
+as
+  my_cursor sys_refcursor;
+begin
+  open my_cursor for 
+    select nazov_mesta, extract(month from datum_zaplatenia) mesiac, extract(year from datum_zaplatenia) rok, count(distinct id_platca) pocet_platcov
+      from d_danovy_urad join d_prislusnost_k_du using(id_urad)
+      join d_platca_dane using(id_platca)
+      join d_platba using(id_platca,id_urad)
+      join d_adresa using(id_adresy)
+      join d_mesto using(id_mesta)
+    where datum_zaplatenia between to_date(p_datum_od, 'DD-MM-YYYY') and to_date(p_datum_do, 'DD-MM-YYYY')
+    group by nazov_mesta, id_mesta, extract(month from datum_zaplatenia),extract(year from datum_zaplatenia)
+    order by 1 asc, 2, count(id_platca) desc;
+ return my_cursor;
+end f_du_obdobie_platca;
+/
+-----------------------------------------------------------------------------------------
+create or replace FUNCTION f_du_platca_suma_dlh(p_id_platca IN INTEGER, p_id_typ_dane IN INTEGER)
+/*
+Funkcia vrati sumu ktoru ma PO/FO zaplatit na daniach. Ale este nezaplatil
+*/
+RETURN NUMBER 
+IS
+  p_suma number(11,2);
+BEGIN
+    select sum(suma) into p_suma
+    from d_platca_dane join d_platba using(id_platca)
+    where DATUM_ZAPLATENIA is null
+    and id_typ_dane=p_id_typ_dane 
+    and id_platca=p_id_platca;
+  RETURN p_suma;
+END f_du_platca_suma_dlh;
+/
+-----------------------------------------------------------------------------------------
+create or replace FUNCTION f_du_platca_suma_platieb(p_id_platca IN INTEGER, p_id_typ_dane IN INTEGER)
+/*
+Funkcia varti sumu ktoru ma PO/FO zaplatit na daniach. Bez ohladu na to ci uz to zaplatil
+*/
+RETURN NUMBER 
+IS
+  p_suma number(11,2);
+BEGIN
+    select sum(suma) into p_suma
+    from d_platca_dane join d_platba using(id_platca)
+    where 
+    id_typ_dane=p_id_typ_dane 
+    and id_platca=p_id_platca;
+  RETURN p_suma;
+END f_du_platca_suma_platieb;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_platili_menej_ako_priemer
+/*
+V˝pis PO, ktorÈ za poslednÈ 2 (6 rokov...kvoli lepsim vypoctom) roky zaplatili zadanÈho typu dane menej, ako je ich priemer ( pre firmy, ktorÈ s˙ platcami dane aspoÚ 6 rokov
+*/
+(
+  p_typ_dane IN integer
+)
+  return sys_refcursor
+as
+  my_cursor_platili_menej sys_refcursor;
+begin
+  open my_cursor_platili_menej for 
+    select dic_firma, nazov, f_du_priemer_platby_za_dan_one(6,20,100) priemer, f_du_priemer_platby_za_dan_all(6,20) priemer_ostatni
+    from d_platca_dane join d_firma using(dic_firma)
+    where f_du_priemer_platby_za_dan_one(6,p_typ_dane,dic_firma)<f_du_priemer_platby_za_dan_all(6,p_typ_dane);
+ return my_cursor_platili_menej;
+end f_du_platili_menej_ako_priemer;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_po_neplatca_dane
+/*
+vypis PO ktore za posledne 2 roky nezaplatili nic na dani zadaneho typu
+*/
+(
+  p_typ_dane IN integer
+)
+  return sys_refcursor
+as
+  my_cursor sys_refcursor;
+begin
+  open my_cursor for
+    select dic_firma, nazov from d_firma join d_platca_dane using(dic_firma)
+      where id_platca not in 
+        (select id_platca from d_platba
+          where d_platba.DATUM_VZNIKU BETWEEN add_months(trunc(sysdate), -24) and sysdate
+          and id_typ_dane = p_typ_dane
+          );
+  return my_cursor;
+end;
+/
+-----------------------------------------------------------------------------------------
+create or replace FUNCTION f_du_priemer_platby_za_dan_all(p_pocet_rokov IN INTEGER, p_typ_dane IN INTEGER)
+/*
+Funkcia vrati PRIEMERNU zaplatenu dan za X rokov za typ_dane Y u vsetkych danovnikov (PO). Je to pouzite v nasledovnej ulohe:
+v˝pis PO, ktorÈ za poslednÈ 2 roky zaplatili zadanÈho typu dane menej, ako je ich priemer ( pre firmy, ktorÈ s˙ platcami dane aspoÚ 6 rokov ),
+*/
+RETURN NUMBER 
+IS
+  p_suma number(11,2);
+BEGIN
+    SELECT TRUNC(AVG((suma*percento)/100),2) into p_suma 
+    FROM d_platba JOIN d_dan USING(id_typ_dane, datum_od) JOIN d_typ_dane USING(id_typ_dane) join d_platca_dane using(id_platca)
+    WHERE id_typ_dane=p_typ_dane 
+          AND extract(YEAR FROM datum_zaplatenia)+p_pocet_rokov > extract(YEAR FROM sysdate) 
+          and dic_podnikatel is null
+    group by nazov_dane;
+  RETURN p_suma;
+END f_du_priemer_platby_za_dan_all;
+/
+-----------------------------------------------------------------------------------------
+create or replace FUNCTION f_du_priemer_platby_za_dan_one(p_pocet_rokov IN INTEGER, p_typ_dane IN INTEGER, p_platca IN INTEGER)
+/*
+Funkcia vrati PRIEMERNU zaplatenu dan za X rokov za typ_dane Y u jednotlivca Z. Je to pouzite v nasledovnej ulohe:
+v˝pis PO, ktorÈ za poslednÈ 2 roky zaplatili zadanÈho typu dane menej, ako je ich priemer ( pre firmy, ktorÈ s˙ platcami dane aspoÚ 6 rokov ),
+*/
+RETURN NUMBER 
+IS
+  p_suma number(11,2);
+BEGIN
+    SELECT TRUNC(AVG((suma*percento)/100),2) into p_suma 
+    FROM d_platba JOIN d_dan USING(id_typ_dane, datum_od) JOIN d_typ_dane USING(id_typ_dane) join d_platca_dane using(id_platca)
+    WHERE id_typ_dane=p_typ_dane 
+          AND extract(YEAR FROM datum_zaplatenia)+p_pocet_rokov > extract(YEAR FROM sysdate) 
+          and id_platca=p_platca
+          and dic_podnikatel is null
+    group by nazov_dane;
+  RETURN p_suma;
+END f_du_priemer_platby_za_dan_one;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_rozpis_platieb
+/*
+rozpis platieb pre konkrÈtnu PO/ FO podæa jednotliv˝ch typov dane zoradenÈ v Ëase 
+spolu s celkovou uhradenou sumou a povinnosùou, ktor˙ eöte maj˙ zaplatiù podæa 
+daÚovÈho priznania za zadanÈ obdobie,
+*/
+(
+  p_id_platca IN number
+)
+  return sys_refcursor
+as
+  my_cursor_rozpis sys_refcursor;
+  checkuj integer;
+begin
+  select distinct dic_firma into checkuj 
+    from d_platca_dane
+    where id_platca=p_id_platca;
+
+  if (checkuj is null) 
+  then
+      open my_cursor_rozpis for 
+        select sysdate from dual;
+    return my_cursor_rozpis;
+  elsif (checkuj is not null)
+  then
+      open my_cursor_rozpis for 
+        select sysdate from dual;
+    return my_cursor_rozpis;
+  end if;
+end f_du_rozpis_platieb;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_typ_dane
+/*
+funkcia ktora vrati id a typ dane
+*/
+return sys_refcursor
+as
+my_cursor sys_refcursor;
+begin
+  open my_cursor for
+    select id_typ_dane, NAZOV_DANE from d_typ_dane;
+    return my_cursor;
+end;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_vypis_mesto_uradu
+/*
+funkcia vrati nazov mesta konkretneho DANOVEHO uradu na zaklade ID_ADRESY danoveho uradu
+*/
+(
+  p_id_adresy_udaru IN integer
+)
+  return sys_refcursor
+as
+  my_cursor_mesto_uradu sys_refcursor;
+begin
+  open my_cursor_mesto_uradu for 
+    select distinct nazov_mesta mesto from d_danovy_urad join d_adresa using(id_adresy) join d_mesto using(id_mesta)
+    where ID_ADRESY=p_id_adresy_udaru;
+ return my_cursor_mesto_uradu;
+end f_du_vypis_mesto_uradu;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_zlozenie_prijmov
+/*
+Ivi tu pridaj komentar - ze aspon ktora je to uloha
+*/
+(
+  p_datum_od  IN varchar2, -- dd-mm-yyyy
+  p_datum_do  IN varchar2, -- dd-mm-yyyy
+  p_typ_dane   IN integer,  -- v intervale <0; 20>
+  p_subjekt    IN integer   -- napriklad 0 pre firmy, 1 pre zivnostnikov
+)
+  return sys_refcursor    -- rok - mesiac - id_urad - mesto_urad - prijem (real)
+as
+  my_cursor sys_refcursor;
+begin
+  if (p_subjekt = 0) -- IN: firmy
+  then
+      open my_cursor for 
+        select extract(year from datum_zaplatenia) rok, extract(month from datum_zaplatenia) mesiac, id_urad, nazov_mesta, sum( suma*(percento/100)) prijem
+          from d_danovy_urad join d_platba using (id_urad)
+          join d_adresa using (id_adresy) join d_mesto using(id_mesta)
+          join d_dan using (id_typ_dane, datum_od)
+          join d_typ_dane using (id_typ_dane)
+          join d_platca_dane using (id_platca)
+          where datum_zaplatenia is not null
+          and datum_zaplatenia between to_date(p_datum_od, 'dd-MM-YYYY') and to_date(p_datum_do, 'dd-MM-YYYY')  --IN
+          and id_typ_dane = p_typ_dane -- IN
+          and dic_firma is not null
+        group by extract(year from datum_zaplatenia), extract(month from datum_zaplatenia), id_urad, nazov_mesta
+        order by 1 desc, 2
+        ;
+    return my_cursor;
+  elsif (p_subjekt = 1) -- IN: zivnostnici
+  then
+      open my_cursor for 
+        select extract(year from datum_zaplatenia) rok, extract(month from datum_zaplatenia) mesiac, id_urad, nazov_mesta, sum( suma*(percento/100)) prijem
+          from d_danovy_urad join d_platba using (id_urad)
+          join d_adresa using (id_adresy) join d_mesto using(id_mesta)
+          join d_dan using (id_typ_dane, datum_od)
+          join d_typ_dane using (id_typ_dane)
+          join d_platca_dane using (id_platca)
+          where datum_zaplatenia is not null
+          and datum_zaplatenia between to_date(p_datum_od, 'dd-MM-YYYY') and to_date(p_datum_do, 'dd-MM-YYYY') --IN
+          and id_typ_dane = p_typ_dane -- IN
+          and dic_podnikatel is not null -- IN
+        group by extract(year from datum_zaplatenia), extract(month from datum_zaplatenia), id_urad, nazov_mesta
+        order by 1 desc, 2
+        ;
+    return my_cursor;
+  end if;
+end;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_zobraz_firmy
+-- funkcia vrati nazov firmy, dic_firma, id_platca, zobrazit len nazov + dic, posielat parameter do procky id_platca
+  return sys_refcursor
+as
+  my_cursor_firma sys_refcursor;
+begin
+  open my_cursor_firma for
+    select nazov, dic_firma, id_platca
+      from d_firma join d_platca_dane using(dic_firma);
+  return my_cursor_firma;
+end;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_zobraz_platcov
+/*
+Funkcia vrati zoznam platcov v tvare:
+id_platca, nazov
+je pritom jedno ci ide o FO alebo PO
+Funkcia sa vyuzije pri INSERTOVANI novej platby - bude to uvodny kombo box
+*/
+  return sys_refcursor
+as
+  my_cursor_fo sys_refcursor;
+begin
+  open my_cursor_fo for
+    
+    select id_platca, meno||' '||priezvisko nazov
+      from d_osoba join d_platca_dane using(dic_podnikatel)
+    union
+    select id_platca, nazov
+      from d_firma join d_platca_dane using(dic_firma);  
+      
+  return my_cursor_fo;
+end f_du_zobraz_platcov;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_zobraz_podnikatelov
+-- funkcia vrati meno podnikatela, dic_podnikatela, id_platca, zobrazit len meno + dic, posielat parameter do procky id_platca
+  return sys_refcursor
+as
+  my_cursor_fo sys_refcursor;
+begin
+  open my_cursor_fo for
+    select meno, priezvisko, dic_podnikatel, id_platca
+      from d_osoba join d_platca_dane using(dic_podnikatel);
+  return my_cursor_fo;
+end;/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_zobraz_prehlad_dani
+-- funkcia vrati suma - den zaplatenia platby pre vybraneho platcu a typ dane
+(
+  p_id_platca IN integer,
+  p_id_typ_dane IN integer
+)
+  return sys_refcursor
+as
+  my_cursor_fp sys_refcursor;
+begin
+  open my_cursor_fp for
+    select suma, datum_zaplatenia
+    from d_platba join d_platca_dane using(id_platca)
+    where id_platca = p_id_platca
+    and id_typ_dane = p_id_typ_dane;
+  return my_cursor_fp;
+end;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_zobraz_prehlad_dani
+-- funkcia vrati suma - den zaplatenia platby pre vybraneho platcu a typ dane
+(
+  p_id_platca IN integer,
+  p_id_typ_dane IN integer
+)
+  return sys_refcursor
+as
+  my_cursor_fp sys_refcursor;
+begin
+  open my_cursor_fp for
+    select suma, datum_zaplatenia
+    from d_platba join d_platca_dane using(id_platca)
+    where id_platca = p_id_platca
+    and id_typ_dane = p_id_typ_dane;
+  return my_cursor_fp;
+end;
+/
+-----------------------------------------------------------------------------------------
+create or replace function f_du_zobraz_udaje_platcu(p_id_platca in INTEGER)
+/*
+Funkcia vrati udaje platcu ak pozname ID_PLATCA
+je jedno ci je to PO/FO, vrati: id_platca, nazov
+*/
+  return sys_refcursor
+as
+  my_cursor_fo sys_refcursor;
+begin
+  open my_cursor_fo for
+    
+select id_platca, nazov from 
+    (
+    select id_platca, meno||' '||priezvisko nazov
+      from d_osoba join d_platca_dane using(dic_podnikatel)
+    union
+    select id_platca, nazov
+      from d_firma join d_platca_dane using(dic_firma)
+    )
+where id_platca=p_id_platca;
+      
+  return my_cursor_fo;
+end f_du_zobraz_udaje_platcu;
+/
+-----------------------------------------------------------------------------------------
+create or replace PROCEDURE p_du_vloz_platbu(
+	   p_id_platca IN d_platba.id_platca%TYPE,
+	   p_id_typ_dane IN d_platba.id_typ_dane%TYPE,
+	   p_datum_od IN d_platba.datum_od%TYPE,
+	   p_suma IN d_platba.suma%TYPE,
+     p_datum_vzniku IN d_platba.datum_vzniku%TYPE,
+     p_datum_zaplatenia IN d_platba.datum_zaplatenia%TYPE
+     )
+/*
+declare
+begin
+p_du_vloz_platbu(104, 11, to_date('01.01.14','DD.MM.RR'), 200, to_date('01.01.17','DD.MM.RR'), to_date('01.01.17','DD.MM.RR'));
+end;
+*/
+IS
+  P_ID_URAR number(11,2);
+BEGIN
+-- select na id urad
+  select distinct id_urad into P_ID_URAR from D_PRISLUSNOST_K_DU where id_platca=p_id_platca;
+    
+  INSERT INTO d_PLATBA (id_platby,        id_platca,    id_typ_dane,    datum_od,   id_urad,    suma,   datum_vzniku,   DATUM_ZAPLATENIA) 
+                VALUES (platba_seq.NEXTVAL,p_id_platca, p_id_typ_dane,  p_datum_od, P_ID_URAR,  p_suma, p_datum_vzniku, p_datum_zaplatenia);
+  COMMIT;
+
+END p_du_vloz_platbu;
+/
+-----------------------------------------------------------------------------------------
+/
+-----------------------------------------------------------------------------------------
+/
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------

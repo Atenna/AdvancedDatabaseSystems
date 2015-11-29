@@ -3,6 +3,10 @@ chybajuci typ dane
 */
 insert into typ_dane(id_typ_dane, nazov_dane) values(8, 'dan z databaz');
 
+-- ak je nastaveny iny datumovy format
+SELECT * FROM nls_session_parameters WHERE parameter = 'NLS_DATE_FORMAT';
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD.MM.YYYY';
+
 /*
 preriedenie vlasnikov firiem...
 po tomto update existuju osoby ktore maju (0,1,2,3) firmy
@@ -108,13 +112,12 @@ CREATE TABLE pom_table (
 
 
 CREATE TABLE pom_table (
-  id number primary key,
+  id number,
   ID_URAD varchar2(50) default NULL,
   SUMA varchar2(50) default NULL,
   DATUM_VZNIKU varchar2(255),
-  DATUM_ZAPLATENIA varchar2(255),
-  PRIMARY KEY (id)
-) AUTO_INCREMENT=1;
+  DATUM_ZAPLATENIA varchar2(255)
+);
 
 INSERT INTO pom_table (ID_URAD,SUMA,DATUM_VZNIKU,DATUM_ZAPLATENIA) VALUES (5,227071,'03.05.81','01.05.86');
 INSERT INTO pom_table (ID_URAD,SUMA,DATUM_VZNIKU,DATUM_ZAPLATENIA) VALUES (3,910098,'24.01.05','24.03.11');
@@ -441,7 +444,6 @@ INSERT INTO kontakt_firmy (dic_firma,id_typ_kontaktu,kontakt) VALUES (49,'3','(0
 delete from platba where mod(id_platby,7) in (3,5);
 delete from platba where datum_zaplatenia<datum_vzniku;
 select count(*) from platba;
-
 
 
 

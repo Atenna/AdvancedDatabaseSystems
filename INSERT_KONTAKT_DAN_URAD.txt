@@ -1,0 +1,12 @@
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(1,1,3,'+421 949 174 157');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(2,2,3,'+421 901 658 632');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(3,3,3,'+421 918 458 004');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(4,4,3,'+421 902 257 396');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(5,5,3,'+421 948 102 157');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(6,6,3,'+421 902 654 741');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(7,7,3,'+421 907 750 158');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(8,8,3,'+421 905 258 117');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(9,9,3,'+421 902 058 964');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(10,10,3,'+421 904 630 458');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(11,3,3,'+421 908 850 158');
+INSERT into d_kontakt_dan_urad(id, id_urad, id_typ_kontaktu,kontakt) values(12,4,3,'+421 908 800 100');
