@@ -425,8 +425,66 @@ BEGIN
 END p_du_vloz_platbu;
 /
 -----------------------------------------------------------------------------------------
+create or replace function f_du_rozpis_platieb
+/*
+rozpis platieb pre konkrÈtnu PO/ FO podæa jednotliv˝ch typov dane zoradenÈ v Ëase 
+spolu s celkovou uhradenou sumou a povinnosùou, ktor˙ eöte maj˙ zaplatiù podæa 
+daÚovÈho priznania za zadanÈ obdobie
+ULOHA 5
+pouzitie: select f_du_rozpis_platieb(100, 1, '01.01.11', '01.10.11') from dual;
+NAVRAT: {<ID_PLATCA=100,ID_TYP_DANE=1,DATUM_VZNIKU=01.01.11,SUMA=3410,DLH=3410>,<ID_PLATCA=100,ID_TYP_DANE=1,DATUM_VZNIKU=01.02.11,SUMA=3010,DLH=0>,}
+*/
+( 
+  p_id_platca IN INTEGER, 
+  p_id_typ_dane IN INTEGER, 
+  p_datup_od IN DATE, 
+  p_datup_do IN DATE 
+)
+RETURN sys_refcursor
+AS
+  my_cursor_rozpis sys_refcursor;
+BEGIN
+  OPEN my_cursor_rozpis FOR 
+  SELECT  id_platca, id_typ_dane, datum_vzniku, 
+          f_du_platca_suma_platieb(id_platca, id_typ_dane, datum_vzniku) suma, 
+          NVL(f_du_platca_suma_dlh(id_platca, id_typ_dane, datum_vzniku),0) dlh 
+  FROM 
+          d_platca_dane JOIN d_platba USING(id_platca) 
+  WHERE 
+        id_platca=p_id_platca 
+        AND id_typ_dane=p_id_typ_dane 
+        AND datum_vzniku BETWEEN p_datup_od AND p_datup_do 
+  group by 
+        id_platca, id_typ_dane, datum_vzniku ;
+  RETURN my_cursor_rozpis;
+END f_du_rozpis_platieb;
+/
 /
 -----------------------------------------------------------------------------------------
+-- zadanie 8
+create or replace function f_du_vypis_zmien
+-- vypis PO ktore za definovane obdobie zmenilo spolu/vlastnika aspon 3x
+(
+  p_zaciatok Varchar2,
+  p_koniec   Varchar2
+)
+return sys_refcursor
+as
+my_cursor_zmeny sys_refcursor;
+begin
+  open my_cursor_zmeny for
+    select distinct f1.nazov--, t1.datum_od, o1.meno||o1.priezvisko, t2.datum_od, o2.meno||o2.priezvisko, t3.datum_od, o3.meno||o3.priezvisko
+    from     d_vlastnici_firmy t1                  join d_osoba o1 on(t1.rodne_cislo=o1.rodne_cislo)
+        join d_vlastnici_firmy t2 using(dic_firma) join d_osoba o2 on(t2.rodne_cislo=o2.rodne_cislo)
+        join d_vlastnici_firmy t3 using(dic_firma) join d_osoba o3 on(t3.rodne_cislo=o3.rodne_cislo)
+        join d_firma f1           using(dic_firma)
+        where t1.datum_od < t2.datum_od
+        and   t2.datum_od < t3.datum_od
+        and t1.datum_od > to_date(p_zaciatok, 'DD-MM-YYYY')
+        and t3.datum_od < to_date(p_koniec,   'DD-MM-YYYY')
+    ;
+  return my_cursor_zmeny;
+end;
 /
 -----------------------------------------------------------------------------------------
 
